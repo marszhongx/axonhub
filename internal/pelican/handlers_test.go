@@ -51,6 +51,8 @@ func TestHandlers_ConfigRoundTrip(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	require.Equal(t, DefaultPrompt, config["prompt"], "the default prompt is offered so the UI can restore it")
 	require.NotEmpty(t, config["defaultPrompt"])
+	require.NotNil(t, config["targets"], "the initial target list must be a JSON array")
+	require.Len(t, config["targets"], 0)
 
 	status, saved := doJSON(t, router, http.MethodPut, "/admin/pelican/config",
 		`{"prompt":"画一只戴帽子的鹈鹕。","scheduleEnabled":true,"targets":[{"model":"gpt-5.6-sol","effort":"xhigh"},{"model":"deepseek-flash","effort":""}]}`)

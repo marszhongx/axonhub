@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { graphqlRequest } from '@/gql/graphql';
 import { apiRequest } from '@/lib/api-client';
 import { getTokenFromStorage } from '@/stores/authStore';
 
@@ -67,6 +68,49 @@ export function usePelicanConfig() {
   return useQuery({
     queryKey: pelicanConfigKey,
     queryFn: () => authed<PelicanConfigResponse>('/admin/pelican/config'),
+  });
+}
+
+/**
+ * The selectable models are the ones the configured channels actually serve, read from
+ * `supportedModels`. The models catalogue can be empty on an instance that only routes traffic,
+ * which would leave the picker without a single option.
+ */
+const PELICAN_MODELS_QUERY = `
+  query PelicanChannelModels {
+    channels(first: 200) {
+      edges {
+        node {
+          id
+          status
+          supportedModels
+        }
+      }
+    }
+  }
+`;
+
+type PelicanChannelModels = {
+  channels: {
+    edges: { node: { id: string; status: string; supportedModels: string[] } }[];
+  };
+};
+
+export function usePelicanModels() {
+  return useQuery({
+    queryKey: ['pelican', 'models'],
+    queryFn: async () => {
+      const data = await graphqlRequest<PelicanChannelModels>(PELICAN_MODELS_QUERY);
+      const models = new Set<string>();
+      for (const edge of data.channels?.edges ?? []) {
+        // A disabled channel cannot serve a request, so its models are not offered.
+        if (edge.node.status !== 'enabled') continue;
+        for (const model of edge.node.supportedModels ?? []) {
+          if (model.trim()) models.add(model);
+        }
+      }
+      return [...models].sort((left, right) => left.localeCompare(right));
+    },
   });
 }
 

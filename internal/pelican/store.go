@@ -127,7 +127,7 @@ func (s *Store) artifactDir() string     { return filepath.Join(s.dir, "artifact
 func (s *Store) conversationDir() string { return filepath.Join(s.dir, "conversations") }
 
 func defaultConfig() Config {
-	return Config{Prompt: DefaultPrompt, Schedule: Schedule{}, Targets: nil}
+	return Config{Prompt: DefaultPrompt, Schedule: Schedule{}, Targets: []Target{}}
 }
 
 // safeName guards against path traversal in identifiers that come from HTTP requests.
@@ -172,6 +172,9 @@ func (s *Store) loadLocked() (Config, []Result, error) {
 	config := decoded.Config
 	if strings.TrimSpace(config.Prompt) == "" {
 		config.Prompt = DefaultPrompt
+	}
+	if config.Targets == nil {
+		config.Targets = []Target{}
 	}
 	for _, target := range config.Targets {
 		if !ValidEffort(target.Effort) {

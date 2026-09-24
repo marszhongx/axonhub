@@ -8,10 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useQueryAllModels } from '@/features/models/data/models';
 import {
   PELICAN_EFFORTS,
   usePelicanConfig,
+  usePelicanModels,
   useSavePelicanConfig,
   type PelicanEffort,
   type PelicanTarget,
@@ -23,7 +23,7 @@ const AUTO = 'auto';
 export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useTranslation();
   const { data: config } = usePelicanConfig();
-  const modelsQuery = useQueryAllModels({ where: { status: 'enabled' } });
+  const modelsQuery = usePelicanModels();
   const save = useSavePelicanConfig();
 
   const [prompt, setPrompt] = useState('');
@@ -38,9 +38,8 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
   }, [config]);
 
   const modelOptions = useMemo(() => {
-    const nodes = modelsQuery.data?.edges?.map((edge) => edge.node) ?? [];
-    const options = nodes.map((node) => ({ value: node.modelID, label: `${node.name} (${node.modelID})` }));
-    // Keep already configured models selectable even when they are no longer in the model list.
+    const options = (modelsQuery.data ?? []).map((model) => ({ value: model, label: model }));
+    // Keep already configured models selectable even when no channel serves them anymore.
     for (const target of targets) {
       if (target.model && !options.some((option) => option.value === target.model)) {
         options.push({ value: target.model, label: target.model });
