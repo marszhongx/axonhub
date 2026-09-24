@@ -209,7 +209,8 @@ export function PelicanPreviewDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="flex h-[85vh] max-w-4xl flex-col gap-0 p-0">
+      {/* The dialog's own sm:max-w-lg wins over an unprefixed max-w-* here. */}
+      <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-2xl">
         {/* pr-12 keeps the actions clear of the close button DialogContent renders itself. */}
         <DialogHeader className="flex-row items-center justify-between gap-3 border-b px-4 py-3 pr-12">
           <div className="min-w-0">
@@ -233,8 +234,9 @@ export function PelicanPreviewDialog({
             <TabsTrigger value="conversation">{t('pelican.preview.tabConversation')}</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="preview" className="min-h-0 flex-1 px-4 pb-4">
-            <div className="h-full overflow-hidden rounded-md border bg-muted/20">
+          <TabsContent value="preview" className="min-h-0 px-4 pb-4">
+            {/* The page is 16:10, so the dialog takes that shape instead of a tall empty box. */}
+            <div className="aspect-[16/10] max-h-[55vh] w-full overflow-hidden rounded-md border bg-muted/20">
               {result.status === 'succeeded' ? (
                 <PelicanPreviewFrame result={result} />
               ) : (
@@ -247,7 +249,7 @@ export function PelicanPreviewDialog({
             </div>
           </TabsContent>
 
-          <TabsContent value="conversation" className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <TabsContent value="conversation" className="max-h-[55vh] overflow-y-auto px-4 pb-4">
             {conversation.isLoading ? (
               <Skeleton className="h-24 w-full" />
             ) : conversation.data ? (
