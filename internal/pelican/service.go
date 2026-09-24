@@ -58,6 +58,9 @@ func NewService(lifecycle fx.Lifecycle, store *Store, runner *Runner, tasks *sch
 
 	lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
+			// Nothing is running yet, so attempts a previous process left behind were interrupted.
+			service.failInterruptedResults(ctx)
+
 			// The task fires every hour; whether a round actually runs is decided in runScheduled,
 			// which also consumes the slot so a skipped hour is never backfilled.
 			return tasks.Register(ctx, scheduler.TaskSpec{
@@ -69,6 +72,24 @@ func NewService(lifecycle fx.Lifecycle, store *Store, runner *Runner, tasks *sch
 		},
 	})
 	return service
+}
+
+// failInterruptedResults closes attempts that a restart left open. The runner records an attempt as
+// running before calling the model, so a restart mid-round would otherwise leave a spinner in the
+// gallery that nothing can ever finish.
+func (s *Service) failInterruptedResults(ctx context.Context) {
+	err := s.store.Update(func(_ *Config, results *[]Result) error {
+		for index := range *results {
+			if (*results)[index].Status == StatusRunning {
+				(*results)[index].Status = StatusFailed
+				(*results)[index].Error = "the round was interrupted by a service restart"
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Error(ctx, "pelican could not close interrupted results", log.Cause(err))
+	}
 }
 
 // Status reports whether a round is running plus the schedule bookkeeping.
