@@ -58,7 +58,8 @@ export default function PelicanTest() {
       </Header>
 
       <Main fixed>
-        <div className="flex flex-col gap-4 p-4">
+        {/* Main is overflow-hidden, so the content area carries the scrolling itself. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span>{t('pelican.page.summary', { total: data?.total ?? 0, succeeded: data?.succeeded ?? 0, failed: data?.failed ?? 0 })}</span>
             {config?.scheduleEnabled ? (

@@ -81,7 +81,7 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col gap-4 overflow-y-auto">
+      <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col gap-4 overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('pelican.settings.title')}</DialogTitle>
         </DialogHeader>
@@ -116,11 +116,12 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
 
           <div className="flex flex-col gap-2">
             {targets.length > 0 ? (
+              // Fixed column widths keep every row aligned, whatever the model name length.
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="w-40 shrink-0">{t('pelican.settings.channel')}</span>
-                <span className="flex-1">{t('pelican.settings.model')}</span>
+                <span className="w-80 shrink-0">{t('pelican.settings.model')}</span>
                 <span className="w-32 shrink-0">{t('pelican.settings.effort')}</span>
-                <span className="size-8 shrink-0" aria-hidden />
+                <span className="w-9 shrink-0" aria-hidden />
               </div>
             ) : null}
             {targets.map((target, index) => (
@@ -138,8 +139,8 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
                   </SelectContent>
                 </Select>
                 <Select value={target.model} onValueChange={(value) => updateTarget(index, { model: value })}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder={t('pelican.settings.modelPlaceholder')} />
+                  <SelectTrigger className="w-80 shrink-0">
+                    <SelectValue className="truncate" placeholder={t('pelican.settings.modelPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
                     {modelsFor(target).map((model) => (
@@ -153,7 +154,7 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
                   value={target.effort === '' ? AUTO : target.effort}
                   onValueChange={(value) => updateTarget(index, { effort: (value === AUTO ? '' : value) as PelicanEffort })}
                 >
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-32 shrink-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -168,6 +169,7 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
                   type="button"
                   variant="ghost"
                   size="icon"
+                  className="shrink-0"
                   aria-label={t('pelican.settings.removeTarget')}
                   onClick={() => setTargets((current) => current.filter((_, position) => position !== index))}
                 >

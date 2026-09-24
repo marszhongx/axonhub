@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IconDownload, IconPhoto } from '@tabler/icons-react';
+import { IconAlertTriangle, IconDownload } from '@tabler/icons-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -18,11 +18,51 @@ import {
 const effortLabel = (t: (key: string) => string, effort: string) =>
   effort ? t(`pelican.efforts.${effort}`) : t('pelican.efforts.auto');
 
-/** Loads a generated document through the authenticated API and renders it in a sandboxed iframe. */
-export function PelicanPreviewFrame({ result, className }: { result: PelicanResult; className?: string }) {
+/**
+ * Logical viewport the generated document is rendered at. Generated pages size themselves from the
+ * viewport (canvas drawings read innerWidth/innerHeight), so a fixed page keeps the results
+ * comparable, and the card can scale that whole page down instead of cropping it.
+ */
+const PAGE_WIDTH = 1000;
+const PAGE_HEIGHT = 750;
+
+/** Tracks the card width so the page above it always fits, whatever the grid column count. */
+function useFitScale(enabled: boolean) {
+  const reference = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const element = reference.current;
+    if (!enabled || !element) return;
+    const update = () => setScale(element.clientWidth / PAGE_WIDTH);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [enabled]);
+
+  return { reference, scale };
+}
+
+/**
+ * Loads a generated document through the authenticated API and renders it in a sandboxed iframe.
+ *
+ * `mode="thumbnail"` shows the whole page scaled to the card, where the card owns the click;
+ * `mode="full"` renders at the page's own size and stays interactive.
+ */
+export function PelicanPreviewFrame({
+  result,
+  className,
+  mode = 'full',
+}: {
+  result: PelicanResult;
+  className?: string;
+  mode?: 'thumbnail' | 'full';
+}) {
   const { t } = useTranslation();
   const [url, setUrl] = useState<string>();
   const [failed, setFailed] = useState(false);
+  const { reference, scale } = useFitScale(mode === 'thumbnail');
 
   useEffect(() => {
     let objectUrl: string | undefined;
@@ -50,29 +90,49 @@ export function PelicanPreviewFrame({ result, className }: { result: PelicanResu
     };
   }, [result.id, result.status, result.format]);
 
-  if (result.status === 'running') {
-    return <Skeleton className={cn('h-full w-full', className)} />;
-  }
-  if (failed || result.status !== 'succeeded') {
+  // The wrapper is rendered before the document finishes loading, so the measurement below has a
+  // box to observe from the first frame on.
+  const content = (() => {
+    if (result.status === 'running') {
+      return <Skeleton className="h-full w-full" />;
+    }
+    if (failed || result.status !== 'succeeded') {
+      // A failed attempt is a result of its own: it must read as a failure, not as an empty frame.
+      return (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-destructive/5 p-4 text-center">
+          <IconAlertTriangle className="size-7 text-destructive/80" />
+          <span className="text-xs font-medium text-destructive">{t('pelican.card.failed')}</span>
+          {result.error ? (
+            <span className="line-clamp-4 text-[11px] leading-relaxed text-muted-foreground">{result.error}</span>
+          ) : null}
+        </div>
+      );
+    }
+    if (!url) {
+      return <Skeleton className="h-full w-full" />;
+    }
     return (
-      <div className={cn('flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/30 p-3 text-center', className)}>
-        <span className="text-xs text-muted-foreground">{t('pelican.card.failed')}</span>
-        {result.error ? <span className="text-[11px] leading-relaxed text-muted-foreground">{result.error}</span> : null}
-      </div>
+      <iframe
+        title={`${result.channelName ? `${result.channelName} ` : ''}${result.model} ${result.effort}`}
+        src={url}
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        style={
+          mode === 'thumbnail'
+            ? { width: PAGE_WIDTH, height: PAGE_HEIGHT, transform: `scale(${scale})`, transformOrigin: 'top left' }
+            : undefined
+        }
+        className={cn('border-0 bg-white', mode === 'thumbnail' ? 'pointer-events-none' : 'h-full w-full')}
+      />
     );
-  }
-  if (!url) {
-    return <Skeleton className={cn('h-full w-full', className)} />;
-  }
+  })();
+
+  if (mode !== 'thumbnail') return content;
 
   return (
-    <iframe
-      title={`${result.channelName ? `${result.channelName} ` : ''}${result.model} ${result.effort}`}
-      src={url}
-      sandbox="allow-scripts"
-      referrerPolicy="no-referrer"
-      className={cn('h-full w-full border-0 bg-white', className)}
-    />
+    <div ref={reference} className={cn('h-full w-full overflow-hidden', className)}>
+      {content}
+    </div>
   );
 }
 
@@ -94,7 +154,7 @@ export function PelicanCard({ result, onOpen }: { result: PelicanResult; onOpen:
           </Badge>
         </div>
         <div className="aspect-[4/3] w-full overflow-hidden bg-muted/20">
-          <PelicanPreviewFrame result={result} />
+          <PelicanPreviewFrame result={result} mode="thumbnail" />
         </div>
         <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-muted-foreground">
           <span>{time}</span>
@@ -166,8 +226,8 @@ export function PelicanPreviewDialog({
                 <PelicanPreviewFrame result={result} />
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-                  <IconPhoto className="size-6 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{t('pelican.card.failed')}</span>
+                  <IconAlertTriangle className="size-7 text-destructive/80" />
+                  <span className="text-sm font-medium text-destructive">{t('pelican.card.failed')}</span>
                   {result.error ? <span className="text-xs text-muted-foreground">{result.error}</span> : null}
                 </div>
               )}
