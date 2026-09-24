@@ -1,0 +1,63 @@
+{
+  "title": "Pelican Test",
+  "subtitle": "Ask every selected model to draw a pelican riding a bicycle and compare the results side by side.",
+  "efforts": {
+    "auto": "Auto",
+    "none": "None",
+    "minimal": "Minimal",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "xhigh": "XHigh",
+    "max": "Max"
+  },
+  "card": {
+    "failed": "Generation failed"
+  },
+  "page": {
+    "run": "Run a round",
+    "running": "Running…",
+    "started": "Round started. Results appear as each model finishes.",
+    "startFailed": "Could not start the round",
+    "settings": "Settings",
+    "refresh": "Refresh",
+    "summary": "{{total}} results · {{succeeded}} succeeded · {{failed}} failed",
+    "nextRun": "Next automatic round",
+    "scheduleOff": "Automatic rounds are off",
+    "emptyHint": "Pick at least one model in the settings to start comparing.",
+    "noResults": "No results yet. Run a round to fill the gallery."
+  },
+  "settings": {
+    "title": "Pelican test settings",
+    "prompt": "Task prompt",
+    "promptPlaceholder": "Describe the drawing task…",
+    "promptHint": "Every selected model receives this exact text, which keeps the comparison fair.",
+    "restoreDefault": "Restore default",
+    "targets": "Models and reasoning levels",
+    "targetsHint": "Add the same model several times with different levels to compare them in one gallery.",
+    "modelPlaceholder": "Select a model",
+    "addTarget": "Add model",
+    "removeTarget": "Remove model",
+    "schedule": "Run every hour",
+    "scheduleHint": "Runs on the server at the top of each hour. A round that is still running makes the next hour be skipped.",
+    "dataDir": "Data directory: {{dir}}",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Settings saved",
+    "saveFailed": "Could not save the settings",
+    "cancel": "Cancel"
+  },
+  "preview": {
+    "tabPreview": "Result",
+    "tabConversation": "Full conversation",
+    "prompt": "Prompt",
+    "reply": "Model reply",
+    "failure": "Failure reason",
+    "finishReason": "Finish reason",
+    "noConversation": "No conversation was recorded for this attempt.",
+    "download": "Download",
+    "close": "Close",
+    "previous": "Previous",
+    "next": "Next"
+  }
+}
