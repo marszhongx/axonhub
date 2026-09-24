@@ -19,7 +19,6 @@
   "pelican.page.startFailed": "无法启动这一轮",
   "pelican.page.started": "已开始，结果会随模型完成逐个出现。",
   "pelican.page.summary": "共 {{total}} 条 · {{succeeded}} 成功 · {{failed}} 失败",
-  "pelican.preview.close": "关闭",
   "pelican.preview.download": "下载",
   "pelican.preview.failure": "失败原因",
   "pelican.preview.finishReason": "结束原因",

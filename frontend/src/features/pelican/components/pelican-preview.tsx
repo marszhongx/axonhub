@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IconDownload, IconPhoto, IconX } from '@tabler/icons-react';
+import { IconDownload, IconPhoto } from '@tabler/icons-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -137,7 +137,8 @@ export function PelicanPreviewDialog({
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="flex h-[85vh] max-w-4xl flex-col gap-0 p-0">
-        <DialogHeader className="flex-row items-center justify-between gap-3 border-b px-4 py-3">
+        {/* pr-12 keeps the actions clear of the close button DialogContent renders itself. */}
+        <DialogHeader className="flex-row items-center justify-between gap-3 border-b px-4 py-3 pr-12">
           <div className="min-w-0">
             <DialogTitle className="truncate text-base">
               {result.channelName ? `${result.channelName} · ` : ''}
@@ -147,15 +148,10 @@ export function PelicanPreviewDialog({
               {new Date(result.createdAt).toLocaleString()} · {result.durationSeconds.toFixed(1)}s
             </p>
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" onClick={() => void download()} disabled={result.status !== 'succeeded'}>
-              <IconDownload className="size-4" />
-              {t('pelican.preview.download')}
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('pelican.preview.close')}>
-              <IconX className="size-4" />
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={() => void download()} disabled={result.status !== 'succeeded'}>
+            <IconDownload className="size-4" />
+            {t('pelican.preview.download')}
+          </Button>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">

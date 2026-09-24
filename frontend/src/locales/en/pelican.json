@@ -19,7 +19,6 @@
   "pelican.page.startFailed": "Could not start the round",
   "pelican.page.started": "Round started. Results appear as each model finishes.",
   "pelican.page.summary": "{{total}} results · {{succeeded}} succeeded · {{failed}} failed",
-  "pelican.preview.close": "Close",
   "pelican.preview.download": "Download",
   "pelican.preview.failure": "Failure reason",
   "pelican.preview.finishReason": "Finish reason",
