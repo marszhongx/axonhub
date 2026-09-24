@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { graphqlRequest } from '@/gql/graphql';
 import { apiRequest } from '@/lib/api-client';
+import { extractNumberIDAsNumber } from '@/lib/utils';
 import { getTokenFromStorage } from '@/stores/authStore';
 
 /** Reasoning levels accepted by the backend; '' means the provider decides. */
@@ -8,8 +9,16 @@ export const PELICAN_EFFORTS = ['', 'none', 'minimal', 'low', 'medium', 'high', 
 export type PelicanEffort = (typeof PELICAN_EFFORTS)[number];
 
 export interface PelicanTarget {
+  /** Gateway channel to call. The dialog picks a channel first, then one of its models. */
+  channel: number;
   model: string;
   effort: PelicanEffort;
+}
+
+export interface PelicanChannel {
+  id: number;
+  name: string;
+  models: string[];
 }
 
 export type PelicanStatus = 'running' | 'succeeded' | 'failed';
@@ -17,6 +26,9 @@ export type PelicanStatus = 'running' | 'succeeded' | 'failed';
 export interface PelicanResult {
   id: string;
   model: string;
+  /** Channel that served the attempt; unset for configurations saved before channels were pinned. */
+  channel?: number;
+  channelName?: string;
   effort: PelicanEffort;
   status: PelicanStatus;
   createdAt: string;
@@ -72,16 +84,17 @@ export function usePelicanConfig() {
 }
 
 /**
- * The selectable models are the ones the configured channels actually serve, read from
- * `supportedModels`. The models catalogue can be empty on an instance that only routes traffic,
- * which would leave the picker without a single option.
+ * The channels a round can be pinned to, with the models each one serves. Selection starts from
+ * the channel because AxonHub routes by model name across channels: without pinning one, the
+ * same model can be served by a different provider between two rounds.
  */
-const PELICAN_MODELS_QUERY = `
-  query PelicanChannelModels {
+const PELICAN_CHANNELS_QUERY = `
+  query PelicanChannels {
     channels(first: 200) {
       edges {
         node {
           id
+          name
           status
           supportedModels
         }
@@ -90,26 +103,29 @@ const PELICAN_MODELS_QUERY = `
   }
 `;
 
-type PelicanChannelModels = {
+type PelicanChannelNodes = {
   channels: {
-    edges: { node: { id: string; status: string; supportedModels: string[] } }[];
+    edges: { node: { id: string; name: string; status: string; supportedModels: string[] } }[];
   };
 };
 
-export function usePelicanModels() {
+export function usePelicanChannels() {
   return useQuery({
-    queryKey: ['pelican', 'models'],
+    queryKey: ['pelican', 'channels'],
     queryFn: async () => {
-      const data = await graphqlRequest<PelicanChannelModels>(PELICAN_MODELS_QUERY);
-      const models = new Set<string>();
-      for (const edge of data.channels?.edges ?? []) {
-        // A disabled channel cannot serve a request, so its models are not offered.
-        if (edge.node.status !== 'enabled') continue;
-        for (const model of edge.node.supportedModels ?? []) {
-          if (model.trim()) models.add(model);
-        }
-      }
-      return [...models].sort((left, right) => left.localeCompare(right));
+      const data = await graphqlRequest<PelicanChannelNodes>(PELICAN_CHANNELS_QUERY);
+      return (data.channels?.edges ?? [])
+        // A disabled channel cannot serve a request, so it is not offered.
+        .filter((edge) => edge.node.status === 'enabled')
+        .map((edge) => ({
+          id: extractNumberIDAsNumber(edge.node.id),
+          name: edge.node.name,
+          models: [...new Set((edge.node.supportedModels ?? []).filter((model) => model.trim()))].sort((left, right) =>
+            left.localeCompare(right)
+          ),
+        }))
+        .filter((channel) => channel.id > 0)
+        .sort((left, right) => left.name.localeCompare(right.name));
     },
   });
 }

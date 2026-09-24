@@ -22,6 +22,8 @@ type CompletionResult struct {
 	FinishReason string
 	// Usage holds the token counts reported by the provider, when available.
 	Usage map[string]int
+	// ChannelName is the display name of the pinned channel, when the call had one.
+	ChannelName string
 }
 
 // ChatCompleter performs one chat completion. The gateway adapter implements it; tests use a fake.
@@ -132,6 +134,7 @@ func (r *Runner) Run(ctx context.Context) ([]Result, error) {
 	for index, target := range config.Targets {
 		results[index] = Result{
 			ID:         newID(r.now(), index),
+			Channel:    target.Channel,
 			Model:      target.Model,
 			Effort:     target.Effort,
 			Status:     StatusRunning,
@@ -139,7 +142,7 @@ func (r *Runner) Run(ctx context.Context) ([]Result, error) {
 			PromptEcho: config.Prompt,
 		}
 	}
-	if err := r.store.SaveResults(results); err != nil {
+	if err := r.appendToHistory(results); err != nil {
 		return nil, err
 	}
 
@@ -179,10 +182,12 @@ func (r *Runner) attempt(ctx context.Context, config Config, index int, result *
 	defer cancel()
 
 	started := r.now()
-	completion, err := r.completer.Complete(callCtx, Target{Model: result.Model, Effort: result.Effort}, config.Prompt)
+	completion, err := r.completer.Complete(callCtx, config.Targets[index], config.Prompt)
 	duration := r.now().Sub(started).Seconds()
 
 	result.DurationSeconds = duration
+	// The gateway resolves the channel it actually used, which is the pinned one.
+	result.ChannelName = completion.ChannelName
 	conversation := Conversation{
 		Prompt:          config.Prompt,
 		Effort:          result.Effort,
@@ -222,6 +227,16 @@ func (r *Runner) attempt(ctx context.Context, config Config, index int, result *
 }
 
 // saveOne merges a single finished result into the persisted history.
+// appendToHistory adds the new attempts to the stored history. Every round compares against what
+// came before, so earlier results stay in the gallery; each attempt then updates its own entry.
+func (r *Runner) appendToHistory(results []Result) error {
+	return r.store.Update(func(_ *Config, stored *[]Result) error {
+		*stored = append(*stored, results...)
+		return nil
+	})
+}
+
+// saveOne stores the outcome of a single attempt.
 func (r *Runner) saveOne(updated Result) error {
 	return r.store.Update(func(_ *Config, results *[]Result) error {
 		for index, existing := range *results {
@@ -289,12 +304,10 @@ func ExtractDocument(reply string) (string, string, bool) {
 		if document == "" {
 			document = htmlPattern.FindString(candidate)
 		}
+		// Any complete document counts. Canvas, WebGL and CSS drawings are as valid an answer as
+		// an SVG one, and rejecting them would hide the model's answer from the comparison.
 		if document != "" {
-			// The task is a drawing: an HTML page without an SVG is not a comparable result.
-			if strings.Contains(strings.ToLower(document), "<svg") {
-				return strings.TrimSpace(document), "html", true
-			}
-			continue
+			return strings.TrimSpace(document), "html", true
 		}
 		if match := svgPattern.FindString(candidate); match != "" {
 			return strings.TrimSpace(match), "svg", true

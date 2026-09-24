@@ -62,6 +62,33 @@ func TestStore_SaveConfigRejectsInvalidInput(t *testing.T) {
 	require.Empty(t, config.Targets)
 }
 
+func TestStore_SaveConfigKeepsTheSameModelOnDifferentChannels(t *testing.T) {
+	store := NewStoreAt(t.TempDir())
+
+	require.NoError(t, store.SaveConfig(Config{Prompt: DefaultPrompt, Targets: []Target{
+		{Channel: 1, Model: "gpt-6-astra", Effort: EffortHigh},
+		{Channel: 4, Model: "gpt-6-astra", Effort: EffortHigh},
+		{Channel: 1, Model: "gpt-6-astra", Effort: EffortHigh},
+		{Channel: 1, Model: "gpt-6-astra", Effort: EffortMax},
+	}}))
+
+	config, _, err := store.Load()
+	require.NoError(t, err)
+	// Comparing one model across two channels is the point of the feature, so the entries stay
+	// apart; only an exact duplicate collapses.
+	require.Equal(t, []Target{
+		{Channel: 1, Model: "gpt-6-astra", Effort: EffortHigh},
+		{Channel: 4, Model: "gpt-6-astra", Effort: EffortHigh},
+		{Channel: 1, Model: "gpt-6-astra", Effort: EffortMax},
+	}, config.Targets)
+}
+
+func TestStore_SaveConfigRejectsNegativeChannel(t *testing.T) {
+	store := NewStoreAt(t.TempDir())
+
+	require.Error(t, store.SaveConfig(Config{Prompt: DefaultPrompt, Targets: []Target{{Channel: -1, Model: "m"}}}))
+}
+
 func TestStore_SaveConfigDeduplicatesTargets(t *testing.T) {
 	store := NewStoreAt(t.TempDir())
 
@@ -80,7 +107,10 @@ func TestStore_SaveConfigDeduplicatesTargets(t *testing.T) {
 
 func TestStore_KeepsResultsWhenConfigChanges(t *testing.T) {
 	store := NewStoreAt(t.TempDir())
-	require.NoError(t, store.SaveResults([]Result{{ID: "r1", Model: "m", Status: StatusSucceeded}}))
+	require.NoError(t, store.Update(func(_ *Config, results *[]Result) error {
+		*results = append(*results, Result{ID: "r1", Model: "m", Status: StatusSucceeded})
+		return nil
+	}))
 
 	require.NoError(t, store.SaveConfig(Config{Prompt: "新的题板", Targets: []Target{{Model: "m"}}}))
 
@@ -99,7 +129,10 @@ func TestStore_ConcurrentWritesKeepStateReadable(t *testing.T) {
 		waitGroup.Add(1)
 		go func(index int) {
 			defer waitGroup.Done()
-			_ = store.SaveResults([]Result{{ID: "r", Model: "m", Status: StatusRunning, Error: string(rune('a' + index))}})
+			_ = store.Update(func(_ *Config, results *[]Result) error {
+				*results = append(*results, Result{ID: "r", Model: "m", Status: StatusRunning, Error: string(rune('a' + index))})
+				return nil
+			})
 		}(index)
 	}
 	waitGroup.Wait()

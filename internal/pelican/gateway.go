@@ -10,6 +10,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/contexts"
 	"github.com/looplj/axonhub/internal/server/api"
+	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/internal/server/orchestrator"
 	"github.com/looplj/axonhub/llm"
 	"github.com/looplj/axonhub/llm/httpclient"
@@ -24,13 +25,17 @@ import (
 // request types change upstream, this is the file to adjust.
 type Gateway struct {
 	orchestrator *orchestrator.ChatCompletionOrchestrator
+	channels     *biz.ChannelService
 }
 
 // NewGateway wires the gateway adapter onto the chat orchestrator AxonHub already built for its
 // own OpenAI-compatible endpoint. Reusing that instance matters: it carries the channel
 // selector, limiter and metrics, and building a second one would re-register them.
 func NewGateway(handlers *api.OpenAIHandlers) *Gateway {
-	return &Gateway{orchestrator: handlers.ChatCompletionHandlers.ChatCompletionOrchestrator}
+	return &Gateway{
+		orchestrator: handlers.ChatCompletionHandlers.ChatCompletionOrchestrator,
+		channels:     handlers.ChannelService,
+	}
 }
 
 type chatMessage struct {
@@ -93,27 +98,69 @@ func (g *Gateway) Complete(ctx context.Context, target Target, prompt string) (C
 		Body:        body,
 	}
 
-	result, err := g.orchestrator.Process(ctx, request)
-	if err != nil {
-		return CompletionResult{}, errors.New(RedactCredentials(truncate(err.Error(), 300)))
+	processor := g.orchestrator
+	if target.Channel > 0 {
+		// Pin the round to one channel. Comparing channels is only meaningful when a retry
+		// cannot silently fall back to a different one. WithAllowedChannels returns a copy, so
+		// the shared orchestrator behind the public API is left untouched.
+		processor = g.orchestrator.WithAllowedChannels([]int{target.Channel})
 	}
 
+	result, err := processor.Process(ctx, request)
+	if err != nil {
+		return g.failed(target, errors.New(RedactCredentials(truncate(err.Error(), 300))))
+	}
+	return g.respond(target, result)
+}
+
+// failed keeps the channel label on a rejected attempt, so a failed row still says which
+// channel it was pinned to.
+func (g *Gateway) failed(target Target, err error) (CompletionResult, error) {
+	return CompletionResult{ChannelName: g.channelName(target.Channel)}, err
+}
+
+// channelName labels a pinned channel. An unknown or disabled channel yields an empty name and
+// the round fails in candidate selection with the gateway's own error.
+func (g *Gateway) channelName(id int) string {
+	if id <= 0 || g.channels == nil {
+		return ""
+	}
+	for _, channel := range g.channels.GetEnabledChannels() {
+		if channel.ID == id {
+			return channel.Name
+		}
+	}
+	return ""
+}
+
+// respond turns one orchestrator result into a completion.
+func (g *Gateway) respond(target Target, result orchestrator.ChatCompletionResult) (CompletionResult, error) {
 	// Some channels answer with a stream even when stream=false was requested.
 	if result.ChatCompletionStream != nil {
-		return collectStream(result.ChatCompletionStream)
+		completion, err := collectStream(result.ChatCompletionStream)
+		if err != nil {
+			return g.failed(target, err)
+		}
+		completion.ChannelName = g.channelName(target.Channel)
+		return completion, nil
 	}
 	if result.ChatCompletion == nil {
-		return CompletionResult{}, errors.New("the gateway returned an empty response")
+		return g.failed(target, errors.New("the gateway returned an empty response"))
 	}
 	if status := result.ChatCompletion.StatusCode; status >= http.StatusBadRequest {
 		detail := RedactCredentials(truncate(strings.TrimSpace(string(result.ChatCompletion.Body)), 300))
 		if detail == "" {
-			return CompletionResult{}, fmt.Errorf("upstream returned HTTP %d", status)
+			return g.failed(target, fmt.Errorf("upstream returned HTTP %d", status))
 		}
-		return CompletionResult{}, fmt.Errorf("upstream returned HTTP %d: %s", status, detail)
+		return g.failed(target, fmt.Errorf("upstream returned HTTP %d: %s", status, detail))
 	}
 
-	return parseChatResponse(result.ChatCompletion.Body)
+	completion, err := parseChatResponse(result.ChatCompletion.Body)
+	if err != nil {
+		return g.failed(target, err)
+	}
+	completion.ChannelName = g.channelName(target.Channel)
+	return completion, nil
 }
 
 // collectStream aggregates an SSE chat stream into a single reply.

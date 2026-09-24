@@ -67,7 +67,7 @@ export function PelicanPreviewFrame({ result, className }: { result: PelicanResu
 
   return (
     <iframe
-      title={`${result.model} ${result.effort}`}
+      title={`${result.channelName ? `${result.channelName} ` : ''}${result.model} ${result.effort}`}
       src={url}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
@@ -79,13 +79,15 @@ export function PelicanPreviewFrame({ result, className }: { result: PelicanResu
 export function PelicanCard({ result, onOpen }: { result: PelicanResult; onOpen: () => void }) {
   const { t } = useTranslation();
   const time = useMemo(() => new Date(result.createdAt).toLocaleString(), [result.createdAt]);
+  // Two rows of the same model on different channels must stay distinguishable.
+  const title = result.channelName ? `${result.channelName} · ${result.model}` : result.model;
 
   return (
     <Card className="gap-0 overflow-hidden p-0">
       <button type="button" onClick={onOpen} className="w-full cursor-pointer text-left">
         <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-          <span className="truncate text-sm font-medium" title={result.model}>
-            {result.model}
+          <span className="truncate text-sm font-medium" title={title}>
+            {title}
           </span>
           <Badge variant="secondary" className="shrink-0 text-[11px]">
             {effortLabel(t, result.effort)}
@@ -138,6 +140,7 @@ export function PelicanPreviewDialog({
         <DialogHeader className="flex-row items-center justify-between gap-3 border-b px-4 py-3">
           <div className="min-w-0">
             <DialogTitle className="truncate text-base">
+              {result.channelName ? `${result.channelName} · ` : ''}
               {result.model} · {effortLabel(t, result.effort)}
             </DialogTitle>
             <p className="mt-1 text-xs text-muted-foreground">

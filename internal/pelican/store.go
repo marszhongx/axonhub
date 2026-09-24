@@ -55,10 +55,13 @@ func ValidEffort(effort Effort) bool {
 	return false
 }
 
-// Target is one model entry: which model to call and at which reasoning level.
+// Target is one model entry: which channel and model to call, at which reasoning level.
 type Target struct {
-	Model  string `json:"model"`
-	Effort Effort `json:"effort"`
+	// Channel pins the target to one gateway channel. Zero means "let the gateway choose",
+	// which is how configurations saved before the picker offered channels are read.
+	Channel int    `json:"channel,omitempty"`
+	Model   string `json:"model"`
+	Effort  Effort `json:"effort"`
 }
 
 // Result status values.
@@ -70,8 +73,12 @@ const (
 
 // Result is the outcome of one attempt at one target.
 type Result struct {
-	ID              string  `json:"id"`
-	Model           string  `json:"model"`
+	ID    string `json:"id"`
+	Model string `json:"model"`
+	// Channel and ChannelName record which channel served the attempt, so two rows of the same
+	// model on different channels stay distinguishable in the gallery.
+	Channel         int     `json:"channel,omitempty"`
+	ChannelName     string  `json:"channelName,omitempty"`
 	Effort          Effort  `json:"effort"`
 	Status          string  `json:"status"`
 	CreatedAt       string  `json:"createdAt"`
@@ -204,10 +211,13 @@ func (s *Store) SaveConfig(config Config) error {
 		if model == "" {
 			return errors.New("model must not be empty")
 		}
+		if target.Channel < 0 {
+			return errors.New("channel must not be negative")
+		}
 		if !ValidEffort(target.Effort) {
 			return fmt.Errorf("unsupported reasoning effort %q", target.Effort)
 		}
-		normalized := Target{Model: model, Effort: target.Effort}
+		normalized := Target{Channel: target.Channel, Model: model, Effort: target.Effort}
 		if _, duplicate := seen[normalized]; duplicate {
 			continue
 		}
@@ -227,18 +237,6 @@ func (s *Store) SaveConfig(config Config) error {
 // NextHour returns the top of the following hour for the given moment.
 func NextHour(now time.Time) time.Time {
 	return now.Truncate(time.Hour).Add(time.Hour)
-}
-
-// SaveResults persists the whole result history.
-func (s *Store) SaveResults(results []Result) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	config, _, err := s.loadLocked()
-	if err != nil {
-		return err
-	}
-	return s.writeStateLocked(state{Version: stateVersion, Config: config, Results: results})
 }
 
 // Update mutates the configuration and results under a single lock, then persists them.

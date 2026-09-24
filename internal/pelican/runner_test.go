@@ -59,6 +59,42 @@ func newTestRunner(t *testing.T, targets []Target, completer ChatCompleter, opti
 	return store, runner
 }
 
+func TestRunner_RecordsTheChannelEachTargetWasPinnedTo(t *testing.T) {
+	completer := &fakeCompleter{handle: func(_ context.Context, target Target) (CompletionResult, error) {
+		return CompletionResult{
+			Reply:       "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
+			ChannelName: "hifox",
+		}, nil
+	}}
+	store, runner := newTestRunner(t, []Target{{Channel: 1, Model: "gpt-6-astra"}, {Model: "unpinned"}}, completer)
+
+	results, err := runner.Run(t.Context())
+	require.NoError(t, err)
+
+	byModel := map[string]Result{}
+	for _, result := range results {
+		byModel[result.Model] = result
+	}
+	// The gallery has to say which channel was compared, otherwise two rows of the same model
+	// are indistinguishable.
+	require.Equal(t, 1, byModel["gpt-6-astra"].Channel)
+	require.Equal(t, "hifox", byModel["gpt-6-astra"].ChannelName)
+	require.Equal(t, 0, byModel["unpinned"].Channel, "a target without a channel stays unpinned")
+
+	// The pinned channel reaches the gateway, which is what makes the round reproducible.
+	calls, _ := completer.snapshot()
+	require.Contains(t, calls, Target{Channel: 1, Model: "gpt-6-astra", Effort: EffortAuto})
+
+	// It is persisted with the result, so the UI still shows it after a restart.
+	_, persisted, err := NewStoreAt(store.Dir()).Load()
+	require.NoError(t, err)
+	for _, result := range persisted {
+		if result.Model == "gpt-6-astra" {
+			require.Equal(t, "hifox", result.ChannelName)
+		}
+	}
+}
+
 func TestRunner_RunsEveryTargetAtItsOwnEffort(t *testing.T) {
 	completer := &fakeCompleter{}
 	store, runner := newTestRunner(t, []Target{{Model: "plain"}, {Model: "solver", Effort: EffortXHigh}}, completer)
@@ -212,6 +248,7 @@ func TestRunner_RequiresAtLeastOneTarget(t *testing.T) {
 func TestExtractDocument(t *testing.T) {
 	const html = "<!DOCTYPE html>\n<html><body><svg><circle r=\"1\" /></svg></body></html>"
 	const svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"2\" /></svg>"
+	const canvasHTML = "<!DOCTYPE html>\n<html><body><canvas id=\"c\"></canvas><script>draw()</script></body></html>"
 
 	cases := []struct {
 		name    string
@@ -224,7 +261,15 @@ func TestExtractDocument(t *testing.T) {
 		{name: "html with surrounding prose", reply: "好的，这是代码：\n" + html + "\n希望有帮助。", content: html, format: "html", ok: true},
 		{name: "prose before a fence", reply: "这是可直接运行的文件。\n\n```html\n" + html + "\n```\n\n**说明**：可调整速度。", content: html, format: "html", ok: true},
 		{name: "standalone svg", reply: "这是图形：\n" + svg + "\n（可保存为 .svg）", content: svg, format: "svg", ok: true},
-		{name: "html without svg is rejected", reply: "<!DOCTYPE html><html><body><p>no drawing</p></body></html>", ok: false},
+		// A drawing can be a canvas, WebGL or CSS scene; requiring svg rejected valid answers.
+		{
+			name:    "canvas instead of svg",
+			reply:   "这是动画版：\n```html\n" + canvasHTML + "\n```\n祝好。",
+			content: canvasHTML,
+			format:  "html",
+			ok:      true,
+		},
+		{name: "html fragment is not a document", reply: "<div>no document</div>", ok: false},
 		{name: "prose only", reply: "抱歉，我无法生成这样的图像。", ok: false},
 		{name: "empty reply", reply: "   ", ok: false},
 	}
@@ -246,4 +291,38 @@ func TestRedactCredentials(t *testing.T) {
 	require.NotContains(t, redacted, "sk-live-9f2b7c1d4e5a6b8c9d0e1f2a3b4c5d6e")
 	require.NotContains(t, redacted, "abcdefghijklmnop")
 	require.Contains(t, redacted, "Invalid API key provided")
+}
+
+func TestRunner_KeepsTheChannelOnAFailedAttempt(t *testing.T) {
+	completer := &fakeCompleter{handle: func(_ context.Context, _ Target) (CompletionResult, error) {
+		return CompletionResult{ChannelName: "openrouter"}, errTestFailure
+	}}
+	_, runner := newTestRunner(t, []Target{{Channel: 6, Model: "deepseek-flash"}}, completer)
+
+	results, err := runner.Run(t.Context())
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, StatusFailed, results[0].Status)
+	require.Equal(t, 6, results[0].Channel)
+	// A rejected attempt still says which channel it was pinned to.
+	require.Equal(t, "openrouter", results[0].ChannelName)
+}
+
+func TestRunner_KeepsResultsFromEarlierRounds(t *testing.T) {
+	completer := &fakeCompleter{}
+	store, runner := newTestRunner(t, []Target{{Channel: 1, Model: "first"}}, completer)
+	require.NoError(t, store.SaveConfig(Config{Prompt: DefaultPrompt, Targets: []Target{{Channel: 1, Model: "first"}}}))
+
+	_, err := runner.Run(t.Context())
+	require.NoError(t, err)
+
+	// A later round compares another channel; the gallery must keep accumulating.
+	require.NoError(t, store.SaveConfig(Config{Prompt: DefaultPrompt, Targets: []Target{{Channel: 4, Model: "second"}}}))
+	_, err = runner.Run(t.Context())
+	require.NoError(t, err)
+
+	_, history, err := store.Load()
+	require.NoError(t, err)
+	require.Len(t, history, 2, "starting a round must not wipe earlier results")
+	require.ElementsMatch(t, []string{"first", "second"}, []string{history[0].Model, history[1].Model})
 }

@@ -55,7 +55,7 @@ func TestHandlers_ConfigRoundTrip(t *testing.T) {
 	require.Len(t, config["targets"], 0)
 
 	status, saved := doJSON(t, router, http.MethodPut, "/admin/pelican/config",
-		`{"prompt":"画一只戴帽子的鹈鹕。","scheduleEnabled":true,"targets":[{"model":"gpt-5.6-sol","effort":"xhigh"},{"model":"deepseek-flash","effort":""}]}`)
+		`{"prompt":"画一只戴帽子的鹈鹕。","scheduleEnabled":true,"targets":[{"channel":1,"model":"gpt-5.6-sol","effort":"xhigh"},{"channel":4,"model":"gpt-5.6-sol","effort":""}]}`)
 	require.Equal(t, http.StatusOK, status, saved)
 	require.Equal(t, true, saved["scheduleEnabled"])
 	// Enabling the schedule must schedule the upcoming top of the hour.
@@ -64,6 +64,9 @@ func TestHandlers_ConfigRoundTrip(t *testing.T) {
 	stored, err := store.Config()
 	require.NoError(t, err)
 	require.Len(t, stored.Targets, 2)
+	// The channel survives the round trip: the UI picks a channel first, then a model.
+	require.Equal(t, 1, stored.Targets[0].Channel)
+	require.Equal(t, 4, stored.Targets[1].Channel)
 	require.Equal(t, EffortXHigh, stored.Targets[0].Effort)
 	require.Equal(t, EffortAuto, stored.Targets[1].Effort)
 }

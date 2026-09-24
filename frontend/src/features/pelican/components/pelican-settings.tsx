@@ -10,8 +10,8 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import {
   PELICAN_EFFORTS,
+  usePelicanChannels,
   usePelicanConfig,
-  usePelicanModels,
   useSavePelicanConfig,
   type PelicanEffort,
   type PelicanTarget,
@@ -23,7 +23,7 @@ const AUTO = 'auto';
 export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useTranslation();
   const { data: config } = usePelicanConfig();
-  const modelsQuery = usePelicanModels();
+  const channelsQuery = usePelicanChannels();
   const save = useSavePelicanConfig();
 
   const [prompt, setPrompt] = useState('');
@@ -37,20 +37,37 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
     setScheduleEnabled(config.scheduleEnabled);
   }, [config]);
 
-  const modelOptions = useMemo(() => {
-    const options = (modelsQuery.data ?? []).map((model) => ({ value: model, label: model }));
-    // Keep already configured models selectable even when no channel serves them anymore.
-    for (const target of targets) {
-      if (target.model && !options.some((option) => option.value === target.model)) {
-        options.push({ value: target.model, label: target.model });
-      }
-    }
-    return options;
-  }, [modelsQuery.data, targets]);
+  const channels = useMemo(() => channelsQuery.data ?? [], [channelsQuery.data]);
+  const channelById = useMemo(() => new Map(channels.map((channel) => [channel.id, channel])), [channels]);
+
+  /** Models of the selected channel; the current value stays selectable if the channel dropped it. */
+  const modelsFor = (target: PelicanTarget) => {
+    const models = channelById.get(target.channel)?.models ?? [];
+    return target.model && !models.includes(target.model) ? [...models, target.model] : models;
+  };
 
   const updateTarget = (index: number, patch: Partial<PelicanTarget>) => {
     setTargets((current) => current.map((target, position) => (position === index ? { ...target, ...patch } : target)));
   };
+
+  /** Switching the channel keeps the model only when that channel serves it too. */
+  const selectChannel = (index: number, channelID: number) => {
+    const models = channelById.get(channelID)?.models ?? [];
+    setTargets((current) =>
+      current.map((target, position) =>
+        position === index
+          ? { ...target, channel: channelID, model: models.includes(target.model) ? target.model : (models[0] ?? '') }
+          : target
+      )
+    );
+  };
+
+  const addTarget = () => {
+    const first = channels[0];
+    setTargets((current) => [...current, { channel: first?.id ?? 0, model: first?.models[0] ?? '', effort: '' }]);
+  };
+
+  const incomplete = targets.some((target) => !target.channel || !target.model);
 
   const submit = async () => {
     try {
@@ -98,16 +115,36 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
           <p className="text-xs text-muted-foreground">{t('pelican.settings.targetsHint')}</p>
 
           <div className="flex flex-col gap-2">
+            {targets.length > 0 ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="w-40 shrink-0">{t('pelican.settings.channel')}</span>
+                <span className="flex-1">{t('pelican.settings.model')}</span>
+                <span className="w-32 shrink-0">{t('pelican.settings.effort')}</span>
+                <span className="size-8 shrink-0" aria-hidden />
+              </div>
+            ) : null}
             {targets.map((target, index) => (
-              <div key={`${target.model}-${index}`} className="flex items-center gap-2">
+              <div key={`${target.channel}-${target.model}-${index}`} className="flex items-center gap-2">
+                <Select value={String(target.channel || '')} onValueChange={(value) => selectChannel(index, Number(value))}>
+                  <SelectTrigger className="w-40 shrink-0">
+                    <SelectValue placeholder={t('pelican.settings.channelPlaceholder')} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {channels.map((channel) => (
+                      <SelectItem key={channel.id} value={String(channel.id)}>
+                        {channel.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={target.model} onValueChange={(value) => updateTarget(index, { model: value })}>
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder={t('pelican.settings.modelPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
-                    {modelOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
+                    {modelsFor(target).map((model) => (
+                      <SelectItem key={model} value={model}>
+                        {model}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -140,13 +177,7 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
             ))}
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-fit"
-            onClick={() => setTargets((current) => [...current, { model: modelOptions[0]?.value ?? '', effort: '' }])}
-          >
+          <Button type="button" variant="outline" size="sm" className="w-fit" onClick={addTarget}>
             <IconPlus className="size-4" />
             {t('pelican.settings.addTarget')}
           </Button>
@@ -168,7 +199,11 @@ export function PelicanSettingsDialog({ open, onOpenChange }: { open: boolean; o
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             {t('pelican.settings.cancel')}
           </Button>
-          <Button type="button" onClick={() => void submit()} disabled={save.isPending || !prompt.trim() || targets.length === 0}>
+          <Button
+            type="button"
+            onClick={() => void submit()}
+            disabled={save.isPending || !prompt.trim() || targets.length === 0 || incomplete}
+          >
             {save.isPending ? t('pelican.settings.saving') : t('pelican.settings.save')}
           </Button>
         </DialogFooter>
