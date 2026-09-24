@@ -16,8 +16,9 @@ import (
 	"time"
 )
 
-// DefaultPrompt is the fixed task sent to every model.
-const DefaultPrompt = "请生成一个完整、可独立运行的 HTML 文件，绘制一只骑自行车的鹈鹕。"
+// DefaultPrompt is the fixed task sent to every model. It states the viewport the preview renders
+// at, so the drawing is designed for the size it will be compared at.
+const DefaultPrompt = "请生成一个完整、可独立运行的 HTML 文件，绘制一只骑自行车的鹈鹕。页面会在 1440×900 的浏览器视口中查看，请让画面完整适配这个尺寸（不要出现滚动条，也不要留大片空白）。"
 
 // MaxPromptLength bounds the editable task text.
 const MaxPromptLength = 4000

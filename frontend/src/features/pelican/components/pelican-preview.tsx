@@ -18,18 +18,13 @@ import {
 const effortLabel = (t: (key: string) => string, effort: string) =>
   effort ? t(`pelican.efforts.${effort}`) : t('pelican.efforts.auto');
 
-/** Tracks the browser viewport: previews render the page at the size a real tab would give it. */
-function useBrowserViewport() {
-  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
-
-  useEffect(() => {
-    const update = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, []);
-
-  return viewport;
-}
+/**
+ * Viewport the generated document is rendered at, and the size the default task asks models to
+ * design for. A fixed page keeps the card, the dialog and every model comparable, instead of
+ * letting each viewer's window decide how the drawing lays out.
+ */
+const PREVIEW_WIDTH = 1440;
+const PREVIEW_HEIGHT = 900;
 
 /**
  * Scales that fixed page into the space the caller has, so nothing is ever cropped.
@@ -37,7 +32,7 @@ function useBrowserViewport() {
  * The card keeps the page's aspect ratio, so its width alone decides the scale; the dialog gets a
  * box of its own shape and the page is fitted into it.
  */
-function usePreviewScale(enabled: boolean, viewport: { width: number; height: number }, mode: 'card' | 'preview') {
+function usePreviewScale(enabled: boolean, mode: 'card' | 'preview') {
   const reference = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>();
 
@@ -48,14 +43,14 @@ function usePreviewScale(enabled: boolean, viewport: { width: number; height: nu
       const { clientWidth, clientHeight } = element;
       // Before layout settles the box has no size; keeping the previous scale avoids a flash.
       if (!clientWidth || !clientHeight) return;
-      const byWidth = clientWidth / viewport.width;
-      setScale(mode === 'card' ? byWidth : Math.min(byWidth, clientHeight / viewport.height));
+      const byWidth = clientWidth / PREVIEW_WIDTH;
+      setScale(mode === 'card' ? byWidth : Math.min(byWidth, clientHeight / PREVIEW_HEIGHT));
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [enabled, mode, viewport.width, viewport.height]);
+  }, [enabled, mode]);
 
   return { reference, scale };
 }
@@ -63,16 +58,14 @@ function usePreviewScale(enabled: boolean, viewport: { width: number; height: nu
 /**
  * Loads a generated document through the authenticated API and renders it in a sandboxed iframe.
  *
- * The page is always rendered at the browser viewport the preview was opened in, so the card and
- * the dialog show the same drawing, and so does opening the HTML in a tab. `mode="card"` hands the
- * click back to the card instead of letting the document consume it.
+ * The page is always rendered at PREVIEW_VIEWPORT, so the card and the dialog show the same drawing.
+ * `mode="card"` hands the click back to the card instead of letting the document consume it.
  */
 export function PelicanPreviewFrame({ result, className, mode = 'preview' }: { result: PelicanResult; className?: string; mode?: 'card' | 'preview' }) {
   const { t } = useTranslation();
   const [url, setUrl] = useState<string>();
   const [failed, setFailed] = useState(false);
-  const viewport = useBrowserViewport();
-  const { reference, scale } = usePreviewScale(true, viewport, mode);
+  const { reference, scale } = usePreviewScale(true, mode);
 
   useEffect(() => {
     let objectUrl: string | undefined;
@@ -133,8 +126,8 @@ export function PelicanPreviewFrame({ result, className, mode = 'preview' }: { r
           position: 'absolute',
           top: '50%',
           left: '50%',
-          width: viewport.width,
-          height: viewport.height,
+          width: PREVIEW_WIDTH,
+          height: PREVIEW_HEIGHT,
           transform: `translate(-50%, -50%) scale(${scale ?? 1})`,
           // Until the first measurement the page would render unscaled and be clipped.
           visibility: scale === undefined ? 'hidden' : undefined,
@@ -149,7 +142,7 @@ export function PelicanPreviewFrame({ result, className, mode = 'preview' }: { r
       ref={reference}
       className={cn('relative overflow-hidden', mode === 'card' ? 'w-full' : 'h-full w-full', className)}
       // The card takes the page's shape, so the drawing fills it instead of leaving bars.
-      style={mode === 'card' ? { aspectRatio: `${viewport.width} / ${viewport.height}` } : undefined}
+      style={mode === 'card' ? { aspectRatio: `${PREVIEW_WIDTH} / ${PREVIEW_HEIGHT}` } : undefined}
     >
       {content}
     </div>
