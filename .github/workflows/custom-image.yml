@@ -1,0 +1,143 @@
+# 把 fork 上的自定义 commit 自动 rebase 到上游，构建、冒烟测试通过后推送到 GHCR。
+#
+# 上游更新后本地不需要重新构建，直接:
+#   docker pull ghcr.io/marszhongx/axonhub:latest && ./scripts/docker/start.sh
+# watchtower 也可以直接盯着这个 tag 自动更新。
+#
+# rebase 冲突或冒烟失败时这个 job 会失败并通知，需要人工处理一次（见 scripts/README.md）。
+name: Build custom image
+
+on:
+  schedule:
+    # 每 6 小时跟进一次上游
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - unstable
+
+concurrency:
+  group: custom-image
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Rebase onto upstream & build
+    # 本地跑 arm64（Apple Silicon），用原生 arm runner 构建最快
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@v7
+        with:
+          ref: unstable
+          fetch-depth: 0
+
+      - name: Rebase onto upstream
+        id: rebase
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/looplj/axonhub.git
+          git fetch --no-tags upstream '+refs/heads/unstable:refs/remotes/upstream/unstable'
+          git rebase upstream/unstable
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 上游没更新时 rebase 不会改动 commit，用 SHA 标签判断是否已经构建过，
+      # 避免每 6 小时重复推送一个内容相同的镜像（否则本地每次 pull 都要重新下载）。
+      - name: Check whether this commit is already built
+        id: check
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          SHA: ${{ steps.rebase.outputs.sha }}
+        run: |
+          if docker manifest inspect "$IMAGE:$SHA" >/dev/null 2>&1; then
+            echo "已构建过 $SHA，跳过"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 先构建到 runner 本地，不推。冒烟通过才推 latest，坏镜像进不了 GHCR，
+      # watchtower 也就不会把它拉到线上。
+      - name: Build image
+        if: steps.check.outputs.skip == 'false'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: axonhub-smoke:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 用一个干净的 sqlite 库把镜像真跑起来：能启动、能跑完自动迁移、
+      # 前端页面和 pelican 路由都在，才算通过。
+      - name: Smoke test
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          docker run -d --name axonhub-smoke \
+            -p 127.0.0.1:18090:8090 \
+            -e AXONHUB_DB_DIALECT=sqlite3 \
+            -e 'AXONHUB_DB_DSN=file:/tmp/smoke.db?cache=shared&_fk=1' \
+            -e AXONHUB_PELICAN_DATA_DIR=/tmp/pelican-smoke \
+            axonhub-smoke:latest
+
+          healthy=false
+          for _ in $(seq 1 60); do
+            if curl -fsS --max-time 3 http://127.0.0.1:18090/health >/dev/null 2>&1; then
+              healthy=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$healthy" != true ]; then
+            echo "::error::镜像启动后 60s 内没有通过 /health"
+            docker logs axonhub-smoke || true
+            exit 1
+          fi
+
+          page=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:18090/pelican)
+          [ "$page" = 200 ] || { echo "::error::/pelican 返回 $page"; docker logs axonhub-smoke; exit 1; }
+
+          # 401 = pelican 管理路由已注册、需要登录
+          api=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:18090/admin/pelican/config)
+          [ "$api" = 401 ] || { echo "::error::/admin/pelican/config 返回 $api"; docker logs axonhub-smoke; exit 1; }
+
+          echo "冒烟测试通过"
+
+      - name: Clean up the smoke container
+        if: always()
+        run: docker rm -f axonhub-smoke >/dev/null 2>&1 || true
+
+      - name: Push image
+        if: steps.check.outputs.skip == 'false'
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          SHA: ${{ steps.rebase.outputs.sha }}
+        run: |
+          docker tag axonhub-smoke:latest "$IMAGE:latest"
+          docker tag axonhub-smoke:latest "$IMAGE:$SHA"
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:$SHA"
+
+      # 把 rebase 结果推回分支，保证 unstable 永远只领先上游一个 commit。
+      # 用 GITHUB_TOKEN 推送不会再次触发 workflow，不会成环。
+      - name: Keep the fork in sync
+        if: steps.rebase.outputs.sha != github.sha
+        env:
+          SHA: ${{ steps.rebase.outputs.sha }}
+        run: |
+          git push --force-with-lease origin unstable
+          echo "已把 $SHA 推回 unstable"
