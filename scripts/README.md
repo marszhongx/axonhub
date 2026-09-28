@@ -142,6 +142,38 @@
 - `Load balancing decision completed` - 总体决策信息
 - `Channel load balancing details` - 每个渠道的详细信息
 
+### Docker 打包 / 启动脚本
+
+#### `docker/build.sh`
+一键打包镜像（前端、后端都在 Docker 内构建）。
+
+```bash
+# 构建要访问 Docker Hub / proxy.golang.org / npm，国内必须先开代理
+export http_proxy=http://127.0.0.1:7890
+export https_proxy=http://127.0.0.1:7890
+
+./scripts/docker/build.sh
+./scripts/docker/build.sh --no-cache    # 额外参数原样传给 docker build
+```
+
+**说明：** 没配 `http_proxy` / `https_proxy` 会直接报错退出。
+
+#### `docker/start.sh`
+一键启动容器：停掉同名旧容器，按配置重建并等待健康检查通过。
+
+```bash
+export MYSQL_USER_NAME=root
+export MYSQL_PASSWORD=******
+export MYSQL_HOST=127.0.0.1   # 可选，默认 127.0.0.1
+export MYSQL_PORT=3306        # 可选，默认 3306
+./scripts/docker/start.sh
+```
+
+**配置：**
+- 数据库连接读环境变量：`MYSQL_USER_NAME`、`MYSQL_PASSWORD` 必填，`MYSQL_HOST`、`MYSQL_PORT` 可选
+- `MYSQL_HOST` 为 `127.0.0.1`/`localhost`/`::1` 时会自动换成 `host.docker.internal`，容器里才能连到宿主机 MySQL
+- 数据库名 `axonhub`、容器名、端口、数据目录在 `start.sh` 顶部直接改
+
 ## 📚 文档
 
 - **[QUICK_START.md](./QUICK_START.md)** - E2E 测试快速入门
