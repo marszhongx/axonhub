@@ -13,6 +13,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/looplj/axonhub/internal/log"
+	"github.com/looplj/axonhub/internal/pelican"
 	"github.com/looplj/axonhub/internal/server/api"
 	"github.com/looplj/axonhub/internal/server/backup"
 	"github.com/looplj/axonhub/internal/server/biz"
@@ -133,6 +134,7 @@ func Run(opts ...fx.Option) {
 			fx.Provide(constructors...),
 			dependencies.Module,
 			scheduler.Module,
+			pelican.Module,
 			biz.Module,
 			orchestrator.Module,
 			events.Module,
