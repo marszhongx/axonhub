@@ -58,6 +58,7 @@ test('flattened nav urls keep the full set of sidebar routes', () => {
       '/channels',
       '/data-storages',
       '/models',
+      '/pelican',
       '/plugins',
       '/project/api-keys',
       '/project/playground',
