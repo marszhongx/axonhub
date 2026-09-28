@@ -7,6 +7,7 @@ import (
 
 	"github.com/looplj/axonhub/internal/ent"
 	"github.com/looplj/axonhub/internal/ent/request"
+	"github.com/looplj/axonhub/internal/pelican"
 	"github.com/looplj/axonhub/internal/server/api"
 	"github.com/looplj/axonhub/internal/server/biz"
 	"github.com/looplj/axonhub/internal/server/gql"
@@ -39,6 +40,7 @@ type Handlers struct {
 	RequestContent *api.RequestContentHandlers
 	OIDC           *api.OIDCHandlers
 	RequestPreview *api.RequestPreviewHandlers
+	Pelican        *pelican.Handlers
 }
 
 type Services struct {
@@ -109,6 +111,9 @@ func SetupRoutes(server *Server, handlers Handlers, client *ent.Client, services
 			handlers.Graphql.Playground.ServeHTTP(c.Writer, c.Request)
 		})
 		adminGroup.POST("/invitations", handlers.Invitation.Create)
+
+		// Pelican drawing test: a self-contained module mounted on the admin API.
+		handlers.Pelican.RegisterRoutes(adminGroup)
 
 		adminGroup.POST("/codex/oauth/start", handlers.Codex.StartOAuth)
 		adminGroup.POST("/codex/oauth/exchange", handlers.Codex.Exchange)
