@@ -48,6 +48,12 @@ export const routeConfigs: RouteGroup[] = [
         mode: 'hidden',
       },
       {
+        // The pelican test compares models, so it needs the same scope as channels/models.
+        path: '/pelican',
+        requiredScopes: ['read_channels'],
+        mode: 'hidden',
+      },
+      {
         path: '/models',
         requiredScopes: ['read_channels'],
         mode: 'hidden',

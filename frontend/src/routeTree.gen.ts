@@ -30,6 +30,7 @@ import { Route as AuthenticatedDashboardChannelSuccessRatesRouteImport } from '.
 import { Route as AuthenticatedDataStoragesIndexRouteImport } from './routes/_authenticated/data-storages/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
+import { Route as AuthenticatedPelicanIndexRouteImport } from './routes/_authenticated/pelican/index'
 import { Route as AuthenticatedPermissionDemoIndexRouteImport } from './routes/_authenticated/permission-demo/index'
 import { Route as AuthenticatedPluginsIndexRouteImport } from './routes/_authenticated/plugins/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
@@ -169,6 +170,12 @@ const AuthenticatedModelsIndexRoute =
   AuthenticatedModelsIndexRouteImport.update({
     id: '/models/',
     path: '/models/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPelicanIndexRoute =
+  AuthenticatedPelicanIndexRouteImport.update({
+    id: '/pelican/',
+    path: '/pelican/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedPermissionDemoIndexRoute =
@@ -365,6 +372,7 @@ export interface FileRoutesByFullPath {
   '/data-storages/': typeof AuthenticatedDataStoragesIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
+  '/pelican/': typeof AuthenticatedPelicanIndexRoute
   '/permission-demo/': typeof AuthenticatedPermissionDemoIndexRoute
   '/plugins/': typeof AuthenticatedPluginsIndexRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
@@ -414,6 +422,7 @@ export interface FileRoutesByTo {
   '/data-storages': typeof AuthenticatedDataStoragesIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
+  '/pelican': typeof AuthenticatedPelicanIndexRoute
   '/permission-demo': typeof AuthenticatedPermissionDemoIndexRoute
   '/plugins': typeof AuthenticatedPluginsIndexRoute
   '/projects': typeof AuthenticatedProjectsIndexRoute
@@ -466,6 +475,7 @@ export interface FileRoutesById {
   '/_authenticated/data-storages/': typeof AuthenticatedDataStoragesIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
+  '/_authenticated/pelican/': typeof AuthenticatedPelicanIndexRoute
   '/_authenticated/permission-demo/': typeof AuthenticatedPermissionDemoIndexRoute
   '/_authenticated/plugins/': typeof AuthenticatedPluginsIndexRoute
   '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
@@ -518,6 +528,7 @@ export interface FileRouteTypes {
     | '/data-storages/'
     | '/help-center/'
     | '/models/'
+    | '/pelican/'
     | '/permission-demo/'
     | '/plugins/'
     | '/projects/'
@@ -567,6 +578,7 @@ export interface FileRouteTypes {
     | '/data-storages'
     | '/help-center'
     | '/models'
+    | '/pelican'
     | '/permission-demo'
     | '/plugins'
     | '/projects'
@@ -618,6 +630,7 @@ export interface FileRouteTypes {
     | '/_authenticated/data-storages/'
     | '/_authenticated/help-center/'
     | '/_authenticated/models/'
+    | '/_authenticated/pelican/'
     | '/_authenticated/permission-demo/'
     | '/_authenticated/plugins/'
     | '/_authenticated/projects/'
@@ -802,6 +815,13 @@ declare module '@tanstack/react-router' {
       path: '/models'
       fullPath: '/models/'
       preLoaderRoute: typeof AuthenticatedModelsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/pelican/': {
+      id: '/_authenticated/pelican/'
+      path: '/pelican'
+      fullPath: '/pelican/'
+      preLoaderRoute: typeof AuthenticatedPelicanIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/permission-demo/': {
@@ -1040,6 +1060,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDataStoragesIndexRoute: typeof AuthenticatedDataStoragesIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
+  AuthenticatedPelicanIndexRoute: typeof AuthenticatedPelicanIndexRoute
   AuthenticatedPermissionDemoIndexRoute: typeof AuthenticatedPermissionDemoIndexRoute
   AuthenticatedPluginsIndexRoute: typeof AuthenticatedPluginsIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
@@ -1077,6 +1098,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDataStoragesIndexRoute: AuthenticatedDataStoragesIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
+  AuthenticatedPelicanIndexRoute: AuthenticatedPelicanIndexRoute,
   AuthenticatedPermissionDemoIndexRoute: AuthenticatedPermissionDemoIndexRoute,
   AuthenticatedPluginsIndexRoute: AuthenticatedPluginsIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,

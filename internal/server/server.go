@@ -11,6 +11,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/looplj/axonhub/internal/log"
+	"github.com/looplj/axonhub/internal/pelican"
 	"github.com/looplj/axonhub/internal/server/api"
 	"github.com/looplj/axonhub/internal/server/backup"
 	"github.com/looplj/axonhub/internal/server/biz"
@@ -129,6 +130,7 @@ func Run(opts ...fx.Option) {
 			orchestrator.Module,
 			events.Module,
 			plugin.Module,
+			pelican.Module,
 			backup.Module,
 			video_storage.Module,
 			api.Module,
